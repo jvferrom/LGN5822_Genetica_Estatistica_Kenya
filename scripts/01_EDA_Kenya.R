@@ -467,24 +467,47 @@ print(p_comparacao_direta)
 
 # ==============================================================================
 # 8.6 SALVAR GRÁFICOS
-# ==============================================================================
 
-# Criar pasta para salvamento
-if (!dir.exists("output_kenya")) dir.create("output_kenya")
+# Criar estrutura de pastas (se não existirem)
+if (!dir.exists("results/figures")) dir.create("results/figures", recursive = TRUE)
+if (!dir.exists("results/tables")) dir.create("results/tables", recursive = TRUE)
 
-# Salvar gráficos
-ggsave("output_kenya/boxplot_GY_privado_publico.png", p_gy_privado_publico, width = 14, height = 8, dpi = 300)
-ggsave("output_kenya/boxplot_W100G_privado_publico.png", p_w100g_privado_publico, width = 14, height = 8, dpi = 300)
-ggsave("output_kenya/boxplot_PH_privado_publico.png", p_ph_privado_publico, width = 14, height = 8, dpi = 300)
-ggsave("output_kenya/comparacao_direta_privado_publico.png", p_comparacao_direta, width = 12, height = 6, dpi = 300)
+# Boxplot: Produtividade (GY) por genótipo com destaque para privados/públicos
+ggsave("results/figures/05_boxplot_GY_privado_publico.png", 
+       plot = p_gy_privado_publico, width = 14, height = 8, dpi = 300)
 
-# Salvar estatísticas
-write.csv(comparacao_tipo, "output_kenya/estatisticas_privado_publico.csv", row.names = FALSE)
+# Boxplot: Peso de 100 Grãos (W100G) por genótipo com destaque para privados/públicos
+ggsave("results/figures/06_boxplot_W100G_privado_publico.png", 
+       plot = p_w100g_privado_publico, width = 14, height = 8, dpi = 300)
 
-cat("\n===== ANÁLISE CONCLUÍDA =====\n")
-cat("Arquivos salvos em: output_kenya/\n")
-cat("- boxplot_GY_privado_publico.png\n")
-cat("- boxplot_W100G_privado_publico.png\n")
-cat("- boxplot_PH_privado_publico.png\n")
-cat("- comparacao_direta_privado_publico.png\n")
-cat("- estatisticas_privado_publico.csv\n")
+# Boxplot: Altura da Planta (PH_R8) por genótipo com destaque para privados/públicos
+ggsave("results/figures/07_boxplot_PH_privado_publico.png", 
+       plot = p_ph_privado_publico, width = 14, height = 8, dpi = 300)
+
+# Comparação direta: Privados vs Públicos (facetas com GY, W100G, PH_R8)
+ggsave("results/figures/08_comparacao_direta_privado_publico.png", 
+       plot = p_comparacao_direta, width = 12, height = 6, dpi = 300)
+
+# Estatísticas comparativas: Privados vs Públicos
+write.csv(comparacao_tipo, "results/tables/05_estatisticas_privado_publico.csv", 
+          row.names = FALSE)
+
+# Resultado do teste t para produtividade
+t_test_df <- data.frame(
+  Estatistica = c("t", "gl", "p_valor", "media_privado", "media_publico", 
+                  "intervalo_conf_inf", "intervalo_conf_sup"),
+  Valor = round(c(t_test_gy$statistic, t_test_gy$parameter, t_test_gy$p.value,
+                  t_test_gy$estimate[1], t_test_gy$estimate[2],
+                  t_test_gy$conf.int[1], t_test_gy$conf.int[2]), 4)
+)
+write.csv(t_test_df, "results/tables/06_teste_t_privado_publico.csv", 
+          row.names = FALSE)
+
+cat("\n===== EXPORTAÇÃO CONCLUÍDA =====\n")
+cat("Arquivos salvos em:\n")
+cat("  results/figures/05_boxplot_GY_privado_publico.png\n")
+cat("  results/figures/06_boxplot_W100G_privado_publico.png\n")
+cat("  results/figures/07_boxplot_PH_privado_publico.png\n")
+cat("  results/figures/08_comparacao_direta_privado_publico.png\n")
+cat("  results/tables/05_estatisticas_privado_publico.csv\n")
+cat("  results/tables/06_teste_t_privado_publico.csv\n")
