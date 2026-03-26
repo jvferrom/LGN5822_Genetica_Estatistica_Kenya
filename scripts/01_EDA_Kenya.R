@@ -270,3 +270,221 @@ write.csv(stats_foco, "results/tables/03_estatisticas_foco_4trials.csv",
 write.csv(outliers_detectados, "results/tables/04_outliers_identificados.csv", 
           row.names = FALSE)
 
+
+
+# ==============================================================================
+# 8. COMPARAÇÃO GENÓTIPOS PRIVADOS vs PÚBLICOS (DADOS FILTRADOS)
+# ==============================================================================
+
+# Identificar tipos de genótipos (privados vs públicos)
+dat_kenya_filtrado <- dat_kenya_filtrado %>%
+  mutate(
+    tipo_genotipo = case_when(
+      grepl("Private|SeedCo|Syngenta|MRISyngenta", COMPANY, ignore.case = TRUE) ~ "Privado",
+      grepl("Public|EMBRAPA|IITA|KALRO|EIAR", COMPANY, ignore.case = TRUE) ~ "Público",
+      TRUE ~ "Outro"
+    )
+  )
+
+# ==============================================================================
+# 8.1 GRÁFICO DE GY POR GENÓTIPO COM DESTAQUE PARA PRIVADOS/PÚBLICOS
+# ==============================================================================
+
+# Selecionar os 10 genótipos mais frequentes nos dados filtrados
+top10_gen_freq <- dat_kenya_filtrado %>%
+  filter(!is.na(GY), !is.na(tipo_genotipo)) %>%
+  count(GEN, tipo_genotipo) %>%
+  arrange(desc(n)) %>%
+  head(10) %>%
+  pull(GEN)
+
+# Dados para o gráfico
+gy_gen_data <- dat_kenya_filtrado %>%
+  filter(GEN %in% top10_gen_freq, !is.na(GY), tipo_genotipo != "Outro") %>%
+  mutate(
+    GEN = factor(GEN, levels = top10_gen_freq),
+    tipo_genotipo = factor(tipo_genotipo, levels = c("Privado", "Público"))
+  )
+
+# Gráfico de boxplot comparativo
+p_gy_privado_publico <- ggplot(gy_gen_data, aes(x = GEN, y = GY, fill = tipo_genotipo)) +
+  geom_boxplot(alpha = 0.7, color = "black", outlier.size = 1) +
+  geom_jitter(width = 0.2, size = 1.5, alpha = 0.5, color = "black") +
+  scale_fill_manual(values = c("Privado" = "#b2bc63", "Público" = "#10342d"),
+                    name = "Tipo de Genótipo") +
+  labs(title = "Produtividade de Grãos por Genótipo",
+       subtitle = "Destaque para genótipos privados e públicos (dados filtrados por CV ≤ 30%)",
+       x = "Genótipo", y = "Produtividade (kg/ha)") +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, color = "gray40"),
+    legend.position = "top",
+    legend.title = element_text(face = "bold")
+  )
+
+print(p_gy_privado_publico)
+
+# ==============================================================================
+# 8.2 GRÁFICO DE W100G POR GENÓTIPO COM DESTAQUE PARA PRIVADOS/PÚBLICOS
+# ==============================================================================
+
+# Selecionar os 30 genótipos com maior peso de grãos
+top30_w100g <- dat_kenya_filtrado %>%
+  filter(!is.na(W100G), !is.na(tipo_genotipo)) %>%
+  group_by(GEN, tipo_genotipo) %>%
+  summarise(media_W100G = mean(W100G, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(media_W100G)) %>%
+  head(17) %>%
+  pull(GEN)
+
+w100g_gen_data <- dat_kenya_filtrado %>%
+  filter(GEN %in% top30_w100g, !is.na(W100G), tipo_genotipo != "Outro") %>%
+  mutate(GEN = factor(GEN, levels = top30_w100g))
+
+p_w100g_privado_publico <- ggplot(w100g_gen_data, aes(x = GEN, y = W100G, fill = tipo_genotipo)) +
+  geom_boxplot(alpha = 0.7, color = "black", outlier.size = 1) +
+  geom_jitter(width = 0.2, size = 1.5, alpha = 0.5, color = "black") +
+  scale_fill_manual(values = c("Privado" = "#b2bc63", "Público" = "#10342d"),
+                    name = "Tipo de Genótipo") +
+  labs(title = "Peso de 100 Grãos por Genótipo",
+       subtitle = "Destaque para genótipos privados e públicos (dados filtrados por CV ≤ 30%)",
+       x = "Genótipo", y = "Peso de 100 Grãos (g)") +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, color = "gray40"),
+    legend.position = "top",
+    legend.title = element_text(face = "bold")
+  )
+
+print(p_w100g_privado_publico)
+
+# ==============================================================================
+# 8.3 GRÁFICO DE ALTURA (PH_R8) POR GENÓTIPO COM DESTAQUE PARA PRIVADOS/PÚBLICOS
+# ==============================================================================
+
+# Selecionar os 20 genótipos com altura mais adequada (valores moderados)
+altura_moderada <- dat_kenya_filtrado %>%
+  filter(!is.na(PH_R8), !is.na(tipo_genotipo)) %>%
+  group_by(GEN, tipo_genotipo) %>%
+  summarise(media_PH = mean(PH_R8, na.rm = TRUE), .groups = "drop") %>%
+  arrange(media_PH) %>%
+  head(20) %>%
+  pull(GEN)
+
+ph_gen_data <- dat_kenya_filtrado %>%
+  filter(GEN %in% altura_moderada, !is.na(PH_R8), tipo_genotipo != "Outro") %>%
+  mutate(GEN = factor(GEN, levels = altura_moderada))
+
+p_ph_privado_publico <- ggplot(ph_gen_data, aes(x = GEN, y = PH_R8, fill = tipo_genotipo)) +
+  geom_boxplot(alpha = 0.7, color = "black", outlier.size = 1) +
+  geom_jitter(width = 0.2, size = 1.5, alpha = 0.5, color = "black") +
+  scale_fill_manual(values = c("Privado" = "#b2bc63", "Público" = "#10342d"),
+                    name = "Tipo de Genótipo") +
+  labs(title = "Altura da Planta por Genótipo",
+       subtitle = "Genótipos com menor altura (maior resistência ao acamamento)",
+       x = "Genótipo", y = "Altura (cm)") +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, color = "gray40"),
+    legend.position = "top",
+    legend.title = element_text(face = "bold")
+  )
+
+print(p_ph_privado_publico)
+
+# ==============================================================================
+# 8.4 ESTATÍSTICA COMPARATIVA: PRIVADOS vs PÚBLICOS
+# ==============================================================================
+
+# Calcular médias e desvios para comparação
+comparacao_tipo <- dat_kenya_filtrado %>%
+  filter(tipo_genotipo %in% c("Privado", "Público")) %>%
+  group_by(tipo_genotipo) %>%
+  summarise(
+    n_observacoes = n(),
+    n_genotipos = n_distinct(GEN),
+    media_GY = mean(GY, na.rm = TRUE),
+    sd_GY = sd(GY, na.rm = TRUE),
+    cv_GY = (sd_GY / media_GY) * 100,
+    media_W100G = mean(W100G, na.rm = TRUE),
+    sd_W100G = sd(W100G, na.rm = TRUE),
+    media_PH = mean(PH_R8, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+cat("\n===== COMPARAÇÃO ESTATÍSTICA: PRIVADOS vs PÚBLICOS =====\n")
+print(as.data.frame(comparacao_tipo))
+
+# Teste t para comparar produtividade entre grupos
+t_test_gy <- t.test(GY ~ tipo_genotipo, data = subset(dat_kenya_filtrado, tipo_genotipo %in% c("Privado", "Público")))
+cat("\n===== TESTE t PARA PRODUTIVIDADE (GY) =====\n")
+print(t_test_gy)
+
+# ==============================================================================
+# 8.5 BOXPLOT COMPARATIVO DIRETO (PRIVADOS vs PÚBLICOS)
+# ==============================================================================
+
+# Preparar dados para comparação direta
+comparacao_direta <- dat_kenya_filtrado %>%
+  filter(tipo_genotipo %in% c("Privado", "Público"), !is.na(GY)) %>%
+  select(GY, W100G, PH_R8, tipo_genotipo) %>%
+  pivot_longer(cols = c(GY, W100G, PH_R8), 
+               names_to = "Trait", 
+               values_to = "Valor") %>%
+  mutate(
+    Trait = case_when(
+      Trait == "GY" ~ "Produtividade (kg/ha)",
+      Trait == "W100G" ~ "Peso 100 Grãos (g)",
+      Trait == "PH_R8" ~ "Altura (cm)"
+    )
+  )
+
+# Boxplot comparativo direto
+p_comparacao_direta <- ggplot(comparacao_direta, aes(x = tipo_genotipo, y = Valor, fill = tipo_genotipo)) +
+  geom_boxplot(alpha = 0.7, color = "black") +
+  geom_jitter(width = 0.2, size = 1.5, alpha = 0.5, color = "black") +
+  facet_wrap(~ Trait, scales = "free_y", ncol = 3) +
+  scale_fill_manual(values = c("Privado" = "#b2bc63", "Público" = "#10342d")) +
+  labs(title = "Comparação entre Genótipos Privados e Públicos",
+       subtitle = "Dados filtrados por CV ≤ 30%",
+       x = "Tipo de Genótipo", y = "Valor",
+       fill = "Tipo") +
+  theme_bw(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, color = "gray40"),
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 11)
+  )
+
+print(p_comparacao_direta)
+
+# ==============================================================================
+# 8.6 SALVAR GRÁFICOS
+# ==============================================================================
+
+# Criar pasta para salvamento
+if (!dir.exists("output_kenya")) dir.create("output_kenya")
+
+# Salvar gráficos
+ggsave("output_kenya/boxplot_GY_privado_publico.png", p_gy_privado_publico, width = 14, height = 8, dpi = 300)
+ggsave("output_kenya/boxplot_W100G_privado_publico.png", p_w100g_privado_publico, width = 14, height = 8, dpi = 300)
+ggsave("output_kenya/boxplot_PH_privado_publico.png", p_ph_privado_publico, width = 14, height = 8, dpi = 300)
+ggsave("output_kenya/comparacao_direta_privado_publico.png", p_comparacao_direta, width = 12, height = 6, dpi = 300)
+
+# Salvar estatísticas
+write.csv(comparacao_tipo, "output_kenya/estatisticas_privado_publico.csv", row.names = FALSE)
+
+cat("\n===== ANÁLISE CONCLUÍDA =====\n")
+cat("Arquivos salvos em: output_kenya/\n")
+cat("- boxplot_GY_privado_publico.png\n")
+cat("- boxplot_W100G_privado_publico.png\n")
+cat("- boxplot_PH_privado_publico.png\n")
+cat("- comparacao_direta_privado_publico.png\n")
+cat("- estatisticas_privado_publico.csv\n")
