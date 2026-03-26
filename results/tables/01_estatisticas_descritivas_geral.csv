@@ -1,0 +1,11 @@
+"Trait","Descricao","N","Media","Mediana","DP","CV_pct","Min","Max","N_missing"
+"FLW_DAYS","Dias até o Florescimento",2018,61.86,55,23.17,37.5,25,148,914
+"GY","Produtividade de Grãos (kg/ha)",2870,1925.59,1823.9,976.9,50.7,12.83,6640,62
+"LOD","Acamamento (escala 1–5)",1819,1.32,1,0.83,62.9,1,5,1113
+"NDM","Dias até a Maturidade",2905,123.91,115,33.64,27.1,41,272,27
+"OIL","Teor de Óleo (%)",170,18.73,18.67,1.04,5.6,16.58,21.23,2762
+"PH_R8","Altura da Planta na Maturidade (cm)",2903,61.71,60,26.31,42.6,8.8,205.2,29
+"PL_EMERG_COUNT","Contagem de Emergência",728,181.54,202,80.88,44.6,1,300,2204
+"PL_EMERG_PCT","Porcentagem de Emergência (%)",2080,73.49,78,21.57,29.4,0.33,103,852
+"PROT","Teor de Proteína (%)",170,41.25,41.71,2.52,6.1,33.97,46.55,2762
+"W100G","Peso de 100 Grãos (g)",1567,20.11,20,5.09,25.3,2,32,1365
