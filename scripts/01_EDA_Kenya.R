@@ -235,3 +235,38 @@ p_gxe <- ggplot(gxe_data, aes(x = ENV, y = Media_GY, group = Genotipo, color = G
   labs(title = "Interação GxE: Normas de Reação no Kenya", subtitle = "Produtividade (GY) dos 10 genótipos mais testados", x = "Ambientes (Menor para Maior Potencial)", y = "Produtividade Média (kg/ha)", color = "Genótipo") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9), panel.grid.minor = element_blank(), plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_text(hjust = 0.5, color = "grey40"))
 print(p_gxe)
+
+# ==============================================================================
+# 8. EXPORTAÇÃO DE RESULTADOS 
+# ==============================================================================
+# Gráfico de Qualidade Experimental (CV%)
+ggsave("results/figures/01_qualidade_cv_kenya.png", plot = p_cv, 
+       width = 10, height = 7, dpi = 300)
+# Matriz de Correlação de Pearson
+ggsave("results/figures/02_matriz_correlacao_kenya.png", plot = p_cor, 
+       width = 9, height = 8, dpi = 300)
+
+# Normas de Reação (Interação GxE)
+ggsave("results/figures/03_normas_reacao_gxe.png", plot = p_gxe, 
+       width = 11, height = 7, dpi = 300)
+
+# Histogramas e Densidades (4 Trials selecionados)
+ggsave("results/figures/04_histogramas_densidades_foco.png", plot = p_hist_dens, 
+       width = 12, height = 8, dpi = 300)
+
+# Estatísticas Descritivas
+write.csv(desc_stats, "results/tables/01_estatisticas_descritivas_geral.csv", 
+          row.names = FALSE)
+
+# Relatório de Qualidade por Ambiente
+write.csv(qc_stats, "results/tables/02_qualidade_ambientes_qc.csv", 
+          row.names = FALSE)
+
+# Estatísticas dos 4 Trials Selecionados
+write.csv(stats_foco, "results/tables/03_estatisticas_foco_4trials.csv", 
+          row.names = FALSE)
+
+# Lista de Outliers Detectados
+write.csv(outliers_detectados, "results/tables/04_outliers_identificados.csv", 
+          row.names = FALSE)
+
