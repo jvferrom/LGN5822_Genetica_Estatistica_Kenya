@@ -566,3 +566,363 @@ coef_mod3_b1 <- round(coef(mod3)[2], 2)
 # ==============================================================================
 # 4. Modelos Polinomiais
 # ==============================================================================
+# ------------------------------------------------------------------------------
+# Modelo polinomial: NDM ~ ELEV + ELEV²
+# ------------------------------------------------------------------------------
+
+# Implementação manual
+df_ne_poly <- dat_clean %>%
+  select(NDM, ELEV) %>%
+  drop_na() %>%
+  mutate(
+    ELEV_c  = ELEV - mean(ELEV),
+    ELEV_c2 = ELEV_c^2
+  )
+mean_elev_ne <- mean(df_ne_poly$ELEV)
+
+y_np   <- df_ne_poly$NDM
+X_np   <- as.matrix(cbind(1, df_ne_poly$ELEV_c, df_ne_poly$ELEV_c2))
+beta_np <- solve(crossprod(X_np)) %*% t(X_np) %*% y_np
+n_np   <- nrow(df_ne_poly); p_np <- ncol(X_np)
+e_np   <- y_np - X_np %*% beta_np
+SQE_np <- as.numeric(crossprod(e_np))
+SQT_np <- sum((y_np - mean(y_np))^2)
+R2_np  <- 1 - SQE_np / SQT_np
+R2adj_np <- 1 - (SQE_np/(n_np-p_np)) / (SQT_np/(n_np-1))
+sig2_np <- SQE_np / (n_np - p_np)
+SE_np   <- sqrt(diag(sig2_np * solve(crossprod(X_np))))
+t_np    <- as.numeric(beta_np) / SE_np
+pv_np   <- 2 * pt(-abs(t_np), df = n_np - p_np)
+
+cat("=== NDM ~ ELEV_c + ELEV_c² (manual, ELEV centrada) ===\n\n")
+tabela_manual_poly <- data.frame(
+  Param      = c("b0 (Intercepto)", "b1 (ELEV_c)", "b2 (ELEV_c²)"),
+  Estimativa = round(as.numeric(beta_np), 6),
+  EP         = round(SE_np, 6),
+  t          = round(t_np, 3),
+  p_valor    = format.pval(pv_np, digits = 3, eps = 0.001)
+)
+print(tabela_manual_poly, row.names = FALSE)
+cat(sprintf("\nR²: %.4f  |  R²adj: %.4f\n", R2_np, R2adj_np))
+
+vertice_np_c <- -beta_np[2] / (2 * beta_np[3])
+vertice_np   <- vertice_np_c + mean_elev_ne
+cat(sprintf("Vértice (escala original): %.0f m\n", vertice_np))
+
+# Salvamento
+write.csv(tabela_manual_poly, file.path(dir_tabelas, "regressao_inferencia_ndm_elev_quad.csv"), row.names = FALSE)
+
+# Verificação com lm()
+mod_ne_lin  <- lm(NDM ~ ELEV_c,               data = df_ne_poly)
+mod_ne_quad <- lm(NDM ~ ELEV_c + I(ELEV_c^2), data = df_ne_poly)
+
+cat("\n=== Comparação modelos ===\n")
+cat("R² linear:    ", round(summary(mod_ne_lin)$r.squared,  4), "\n")
+cat("R² quadrático:", round(summary(mod_ne_quad)$r.squared, 4), "\n\n")
+print(anova(mod_ne_lin, mod_ne_quad))
+
+# Gráficos
+new_ne <- data.frame(
+  ELEV_c = seq(min(df_ne_poly$ELEV_c), max(df_ne_poly$ELEV_c), length = 300)
+) %>% mutate(ELEV = ELEV_c + mean_elev_ne)
+new_ne$pred_lin  <- predict(mod_ne_lin,  newdata = new_ne)
+new_ne$pred_quad <- predict(mod_ne_quad, newdata = new_ne)
+
+p_ndm_elev <- ggplot(df_ne_poly, aes(x = ELEV, y = NDM)) +
+  geom_point(alpha = 0.18, color = "#7F8C8D", size = 1.5) +
+  geom_line(data = new_ne, aes(y = pred_lin,  color = "Linear"),     linewidth = 1.2) +
+  geom_line(data = new_ne, aes(y = pred_quad, color = "Quadrático"), linewidth = 1.2) +
+  scale_color_manual(values = c("Linear" = "#3498DB", "Quadrático" = "#E74C3C")) +
+  labs(title    = "Dias para maturidade × Altitude (Kenya)",
+       subtitle = sprintf("Vértice: ~%.0f m  |  R²_lin=%.3f  vs  R²_quad=%.3f",
+                          vertice_np,
+                          summary(mod_ne_lin)$r.squared,
+                          summary(mod_ne_quad)$r.squared),
+       x = "Altitude (m)", y = "NDM (dias)", color = "Modelo") +
+  theme_bw(base_size = 12) + theme(legend.position = "top")
+
+df_ne_faixa <- df_ne_poly %>%
+  mutate(faixa = cut(ELEV,
+                     breaks = c(0, 500, 1000, 1500, 2000, Inf),
+                     labels = c("0–500","500–1000","1000–1500","1500–2000",">2000")))
+
+p_ndm_elev_box <- ggplot(df_ne_faixa, aes(x = faixa, y = NDM, fill = faixa)) +
+  geom_boxplot(alpha = 0.7, outlier.alpha = 0.15) +
+  scale_fill_brewer(palette = "Blues") +
+  labs(title = "NDM por faixa de altitude",
+       x = "Faixa (m)", y = "NDM (dias)") +
+  theme_bw(base_size = 12) + theme(legend.position = "none")
+
+p_ndm_elev_combined <- p_ndm_elev + p_ndm_elev_box
+print(p_ndm_elev_combined)
+
+ggsave(file.path(dir_figuras, "regressao_quad_ndm_elev.png"), 
+       plot = p_ndm_elev_combined, width = 10, height = 5, dpi = 300)
+
+
+# ==============================================================================
+# 5. Modelos com Interações
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Interação: NDM ~ FLW_DAYS * ELEV
+# ------------------------------------------------------------------------------
+
+df_int <- dat_clean %>%
+  select(NDM, FLW_DAYS, ELEV) %>%
+  drop_na() %>%
+  mutate(
+    ELEV_c = ELEV - mean(ELEV),
+    inter  = FLW_DAYS * ELEV_c
+  )
+
+# Implementação manual
+y_int <- df_int$NDM
+X_int <- as.matrix(cbind(1, df_int$FLW_DAYS, df_int$ELEV_c, df_int$inter))
+
+beta_int  <- solve(crossprod(X_int)) %*% t(X_int) %*% y_int
+n_int     <- nrow(df_int); p_int <- ncol(X_int)
+e_int     <- y_int - X_int %*% beta_int
+SQE_int   <- as.numeric(crossprod(e_int))
+SQT_int   <- sum((y_int - mean(y_int))^2)
+R2_int    <- 1 - SQE_int / SQT_int
+R2adj_int <- 1 - (SQE_int/(n_int-p_int)) / (SQT_int/(n_int-1))
+sig2_int  <- SQE_int / (n_int - p_int)
+SE_int    <- sqrt(diag(sig2_int * solve(crossprod(X_int))))
+t_int     <- as.numeric(beta_int) / SE_int
+pv_int    <- 2 * pt(-abs(t_int), df = n_int - p_int)
+
+cat("=== NDM ~ FLW_DAYS * ELEV_c (manual) ===\n\n")
+tabela_int <- data.frame(
+  Param = c("b0", "b1 (FLW_DAYS)", "b2 (ELEV_c)", "b3 (FLW_DAYS:ELEV_c)"),
+  Est   = round(as.numeric(beta_int), 6),
+  EP    = round(SE_int, 6),
+  t     = round(t_int, 3),
+  p     = format.pval(pv_int, digits = 3, eps = 0.001)
+)
+print(tabela_int, row.names = FALSE)
+cat(sprintf("\nR²: %.4f  |  R²adj: %.4f\n", R2_int, R2adj_int))
+
+# Salvamento
+write.csv(tabela_int, file.path(dir_tabelas, "regressao_interacao_ndm_flwdays_elev.csv"), row.names = FALSE)
+
+# Verificação via lm()
+mod_adit <- lm(NDM ~ FLW_DAYS + ELEV_c, data = df_int)
+mod_int  <- lm(NDM ~ FLW_DAYS * ELEV_c, data = df_int)
+
+cat("\n=== Modelo aditivo ===\n")
+cat(sprintf("R² = %.4f  |  R²adj = %.4f\n",
+            summary(mod_adit)$r.squared, summary(mod_adit)$adj.r.squared))
+cat("\n=== Modelo com interação ===\n")
+print(summary(mod_int))
+cat("\n=== Teste F: aditivo vs interação ===\n")
+print(anova(mod_adit, mod_int))
+
+# Visualização da interação
+mean_elev_int <- mean(dat_clean$ELEV, na.rm = TRUE)
+q_elev <- quantile(df_int$ELEV, c(0.10, 0.50, 0.90), na.rm = TRUE)
+q_elev_c <- q_elev - mean_elev_int
+
+pred_df <- expand.grid(
+  FLW_DAYS = seq(min(df_int$FLW_DAYS), max(df_int$FLW_DAYS), length = 100),
+  ELEV_c   = q_elev_c
+) %>%
+  mutate(
+    NDM_pred = predict(mod_int, newdata = .),
+    ELEV_lbl = factor(
+      paste0("ELEV = ", round(ELEV_c + mean_elev_int, 0), " m"),
+      levels = paste0("ELEV = ", round(q_elev, 0), " m"))
+  )
+
+p_int1 <- ggplot(pred_df, aes(x = FLW_DAYS, y = NDM_pred, color = ELEV_lbl)) +
+  geom_line(linewidth = 1.3) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(title    = "NDM ~ FLW_DAYS: efeito moderado pela altitude",
+       subtitle = "Linhas de regressão para P10, mediana e P90 de ELEV",
+       x = "Dias para florescimento (FLW_DAYS)", y = "NDM previsto (dias)",
+       color = NULL) +
+  theme_bw(base_size = 12) + theme(legend.position = "top")
+
+p_int2 <- df_int %>%
+  mutate(elev_grp = cut(ELEV,
+                        breaks = quantile(ELEV, c(0, 0.33, 0.67, 1), na.rm = TRUE),
+                        labels = c("Baixa (<P33)", "Média (P33–P67)", "Alta (>P67)"),
+                        include.lowest = TRUE)) %>%
+  ggplot(aes(x = FLW_DAYS, y = NDM, color = elev_grp)) +
+  geom_point(alpha = 0.15, size = 1) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1.2) +
+  scale_color_manual(values = c("#3498DB","#E67E22","#C0392B")) +
+  labs(title    = "Regressões por grupo de altitude",
+       subtitle = "Diagnóstico visual da interação FLW_DAYS × ELEV",
+       x = "FLW_DAYS (dias)", y = "NDM (dias)", color = "Altitude") +
+  theme_bw(base_size = 12) + theme(legend.position = "top")
+
+p_int_combined <- p_int1 + p_int2
+print(p_int_combined)
+
+ggsave(file.path(dir_figuras, "regressao_interacao_ndm_flwdays_elev.png"), 
+       plot = p_int_combined, width = 10, height = 6, dpi = 300)
+
+# ------------------------------------------------------------------------------
+# Interação: GY ~ NDM * ELEV
+# ------------------------------------------------------------------------------
+
+df_gy_int <- dat_clean %>% select(GY, NDM, ELEV) %>% drop_na()
+
+mod_gy_adit <- lm(GY ~ NDM + ELEV, data = df_gy_int)
+mod_gy_int  <- lm(GY ~ NDM * ELEV, data = df_gy_int)
+
+cat("\n=== GY ~ NDM * ELEV ===\n")
+cat("=== Aditivo: R²adj =", round(summary(mod_gy_adit)$adj.r.squared, 4), "\n")
+cat("=== Interação: R²adj =", round(summary(mod_gy_int)$adj.r.squared, 4), "\n\n")
+print(anova(mod_gy_adit, mod_gy_int))
+print(summary(mod_gy_int))
+
+# Salvamento
+tabela_gy_int <- data.frame(
+  Parametro = names(coef(mod_gy_int)),
+  Estimativa = round(coef(mod_gy_int), 6),
+  EP = round(summary(mod_gy_int)$coefficients[,2], 6),
+  t_valor = round(summary(mod_gy_int)$coefficients[,3], 4),
+  p_valor = format.pval(summary(mod_gy_int)$coefficients[,4], digits = 3, eps = 0.001)
+)
+write.csv(tabela_gy_int, file.path(dir_tabelas, "regressao_interacao_gy_ndm_elev.csv"), row.names = FALSE)
+
+# Ponto de indiferença
+b_NDM <- coef(mod_gy_int)["NDM"]
+b_int_gy <- coef(mod_gy_int)["NDM:ELEV"]
+ponto_indiferenca <- round(-b_NDM / b_int_gy, 0)
+
+cat(sprintf("\nPonto de indiferença (altitude onde efeito de NDM sobre GY se anula): %d m\n", ponto_indiferenca))
+
+
+# ==============================================================================
+# 6. Diagnóstico Completo dos Modelos
+# ==============================================================================
+
+# Selecionar um modelo múltiplo para diagnóstico (GY ~ PH_R8 + W100G + NDM)
+df_mult <- dat_clean %>%
+  select(GY, PH_R8, W100G, NDM) %>%
+  drop_na()
+
+mod_mult <- lm(GY ~ PH_R8 + W100G + NDM, data = df_mult)
+
+# Gráficos de diagnóstico
+col_escuro <- adjustcolor("#2C3E50", alpha.f = 0.3)
+col_verm   <- adjustcolor("#C0392B", alpha.f = 0.5)
+
+png(file.path(dir_figuras, "diagnostico_modelo_multiplo.png"), 
+    width = 11, height = 10, units = "in", res = 300)
+par(mfrow = c(2, 3), mar = c(4, 4, 3, 1))
+
+plot(mod_mult, which = 1, main = "1. Resíduos vs Ajustados",
+     col = col_escuro, pch = 16)
+plot(mod_mult, which = 2, main = "2. Normal QQ-plot",
+     col = col_escuro, pch = 16)
+plot(mod_mult, which = 3, main = "3. Scale-Location",
+     col = col_escuro, pch = 16)
+plot(mod_mult, which = 4, main = "4. Distância de Cook",
+     col = col_verm,   pch = 16)
+plot(mod_mult, which = 5, main = "5. Resíduos vs Leverage",
+     col = col_escuro, pch = 16)
+
+hist(mod_mult$residuals, breaks = 60, col = "#3498DB",
+     border = "white", main = "6. Distribuição dos resíduos",
+     xlab = "Resíduo (kg/ha)", ylab = "Frequência")
+curve(dnorm(x, mean = 0, sd = sd(mod_mult$residuals)) *
+        length(mod_mult$residuals) *
+        diff(range(mod_mult$residuals)) / 60,
+      add = TRUE, col = "#E74C3C", lwd = 2)
+legend("topright", "Normal teórica", col = "#E74C3C", lwd = 2, bty = "n")
+
+dev.off()
+
+# Testes de homocedasticidade
+bp_mult  <- lmtest::bptest(mod_mult)
+ncv_mult <- car::ncvTest(mod_mult)
+bp_ph    <- lmtest::bptest(mod1)
+
+cat("\n=== Testes de Homocedasticidade ===\n")
+cat(sprintf("Breusch-Pagan (GY ~ PH_R8+W100G+NDM): BP = %.3f, df = %d, p = %s\n",
+            bp_mult$statistic, bp_mult$parameter,
+            format.pval(bp_mult$p.value, digits = 3, eps = 0.001)))
+cat(sprintf("Breusch-Pagan (GY ~ PH_R8): BP = %.3f, df = %d, p = %s\n",
+            bp_ph$statistic, bp_ph$parameter,
+            format.pval(bp_ph$p.value, digits = 3, eps = 0.001)))
+cat(sprintf("NCV (car), modelo múltiplo: Chi² = %.3f, df = %d, p = %s\n",
+            ncv_mult$ChiSquare, ncv_mult$Df,
+            format.pval(ncv_mult$p, digits = 3, eps = 0.001)))
+
+# Salvamento dos testes
+testes_homoc <- data.frame(
+  Teste = c("Breusch-Pagan (múltiplo)", "Breusch-Pagan (simples)", "NCV"),
+  Estatistica = c(round(bp_mult$statistic, 3), round(bp_ph$statistic, 3), round(ncv_mult$ChiSquare, 3)),
+  gl = c(bp_mult$parameter, bp_ph$parameter, ncv_mult$Df),
+  p_valor = c(format.pval(bp_mult$p.value, 3, eps=0.001),
+              format.pval(bp_ph$p.value, 3, eps=0.001),
+              format.pval(ncv_mult$p, 3, eps=0.001))
+)
+write.csv(testes_homoc, file.path(dir_tabelas, "testes_homocedasticidade.csv"), row.names = FALSE)
+
+# Teste de normalidade (Shapiro-Wilk)
+set.seed(42)
+res_sample <- sample(mod_mult$residuals, min(5000, length(mod_mult$residuals)))
+sw <- shapiro.test(res_sample)
+cat(sprintf("\n=== Shapiro-Wilk (normalidade dos resíduos) ===\n"))
+cat(sprintf("W = %.4f, p-valor = %s\n", sw$statistic, format.pval(sw$p.value, digits=3)))
+cat(sprintf("n da amostra: %d\n", length(res_sample)))
+
+# Salvamento
+shapiro_result <- data.frame(
+  Teste = "Shapiro-Wilk",
+  W = round(sw$statistic, 4),
+  p_valor = format.pval(sw$p.value, digits = 3, eps = 0.001),
+  n_amostra = length(res_sample)
+)
+write.csv(shapiro_result, file.path(dir_tabelas, "teste_normalidade_residuos.csv"), row.names = FALSE)
+
+
+# ==============================================================================
+# 7. Tabela Resumo dos Modelos
+# ==============================================================================
+
+# Modelos adicionais para a tabela resumo
+mod_elev <- lm(GY ~ ELEV, data = dat_clean)
+mod_fe <- lm(FLW_DAYS ~ ELEV, data = dat_clean)
+mod_prot_elev <- lm(PROT ~ ELEV, data = dat_clean)
+mod_oil_elev <- lm(OIL ~ ELEV, data = dat_clean)
+mod_lat <- lm(NDM ~ LAT, data = dat_clean)
+mod_quad <- lm(GY ~ ELEV + I(ELEV^2), data = dat_clean)
+
+modelos_lista <- list(
+  "GY ~ PH_R8"              = mod1,
+  "PROT ~ OIL"              = mod2,
+  "NDM ~ FLW_DAYS"          = mod3,
+  "GY ~ PH_R8+W100G+NDM"   = mod_mult,
+  "GY ~ ELEV"               = mod_elev,
+  "FLW_DAYS ~ ELEV"         = mod_fe,
+  "PROT ~ ELEV"             = mod_prot_elev,
+  "OIL ~ ELEV"              = mod_oil_elev,
+  "GY ~ ELEV + ELEV²"      = mod_quad,
+  "NDM ~ ELEV + ELEV²"     = mod_ne_quad,
+  "NDM ~ LAT"               = mod_lat,
+  "NDM ~ FLW_DAYS*ELEV"    = mod_int,
+  "GY ~ NDM*ELEV"           = mod_gy_int
+)
+
+diag_tab <- map_dfr(modelos_lista, function(m) {
+  s <- summary(m)
+  tibble(
+    n     = length(m$residuals),
+    R2    = round(s$r.squared,     3),
+    R2adj = round(s$adj.r.squared, 3),
+    RMSE  = round(sqrt(mean(m$residuals^2)), 1),
+    F_p   = format.pval(pf(s$fstatistic[1], s$fstatistic[2],
+                           s$fstatistic[3], lower.tail=FALSE),
+                        digits=2, eps=0.001)
+  )
+}, .id = "Modelo")
+
+write.csv(diag_tab, file.path(dir_tabelas, "tabela_resumo_modelos.csv"), row.names = FALSE)
+
+print(diag_tab)
